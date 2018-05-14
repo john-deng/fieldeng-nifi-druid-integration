@@ -1,14 +1,15 @@
 package com.hortonworks.nifi.controller;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-
+import com.hortonworks.nifi.controller.api.DruidTranquilityService;
+import com.metamx.common.Granularity;
+import com.metamx.tranquility.beam.Beam;
+import com.metamx.tranquility.beam.ClusteredBeamTuning;
+import com.metamx.tranquility.druid.*;
+import com.metamx.tranquility.tranquilizer.Tranquilizer;
+import com.metamx.tranquility.typeclass.Timestamper;
+import io.druid.data.input.impl.TimestampSpec;
+import io.druid.granularity.QueryGranularity;
+import io.druid.query.aggregation.*;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -24,29 +25,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.joda.time.DateTime;
 import org.joda.time.Period;
 
-import com.hortonworks.nifi.controller.api.DruidTranquilityService;
-import com.metamx.common.Granularity;
-import com.metamx.tranquility.beam.Beam;
-import com.metamx.tranquility.beam.ClusteredBeamTuning;
-import com.metamx.tranquility.druid.DruidBeamConfig;
-import com.metamx.tranquility.druid.DruidBeams;
-import com.metamx.tranquility.druid.DruidDimensions;
-import com.metamx.tranquility.druid.DruidEnvironment;
-import com.metamx.tranquility.druid.DruidLocation;
-import com.metamx.tranquility.druid.DruidRollup;
-import com.metamx.tranquility.tranquilizer.Tranquilizer;
-import com.metamx.tranquility.typeclass.Timestamper;
-
-import io.druid.data.input.impl.TimestampSpec;
-import io.druid.granularity.QueryGranularity;
-import io.druid.query.aggregation.AggregatorFactory;
-import io.druid.query.aggregation.CountAggregatorFactory;
-import io.druid.query.aggregation.DoubleMaxAggregatorFactory;
-import io.druid.query.aggregation.DoubleMinAggregatorFactory;
-import io.druid.query.aggregation.DoubleSumAggregatorFactory;
-import io.druid.query.aggregation.LongMaxAggregatorFactory;
-import io.druid.query.aggregation.LongMinAggregatorFactory;
-import io.druid.query.aggregation.LongSumAggregatorFactory;
+import java.io.IOException;
+import java.util.*;
 
 @Tags({"Druid","Timeseries","OLAP"})
 @CapabilityDescription("Provides a controller service to manage property files.")
@@ -115,7 +95,7 @@ public class DruidTranquilityController extends AbstractControllerService implem
             .name("segment_granularity")
             .description("Time unit by which to group and aggregate/rollup events.")
             .required(true)
-            .allowableValues("NONE","SECOND","MINUTE","TEN_MINUTE","HOUR","DAY","MONTH","YEAR")
+            .allowableValues("NONE","SECOND","MINUTE","HOUR","DAY","MONTH","YEAR")
             .defaultValue("MINUTE")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
@@ -124,8 +104,8 @@ public class DruidTranquilityController extends AbstractControllerService implem
             .name("query_granularity")
             .description("Time unit by which to group and aggregate/rollup events.")
             .required(true)
-            .allowableValues("NONE","SECOND","MINUTE","TEN_MINUTE","HOUR","DAY","MONTH","YEAR")
-            .defaultValue("TEN_MINUTE")
+            .allowableValues("NONE","SECOND","MINUTE","HOUR","DAY","MONTH","YEAR")
+            .defaultValue("MINUTE")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 	
@@ -346,9 +326,6 @@ public class DruidTranquilityController extends AbstractControllerService implem
                 break;
             case "FIVE_MINUTE":
                 granularity = Granularity.FIVE_MINUTE;
-                break;
-            case "TEN_MINUTE":
-                granularity = Granularity.TEN_MINUTE;
                 break;
             case "FIFTEEN_MINUTE":
                 granularity = Granularity.FIFTEEN_MINUTE;
